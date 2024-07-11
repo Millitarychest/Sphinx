@@ -67,6 +67,7 @@ pub fn dir_walk(depth: u32,root: &PathBuf,filter: fn(name: &PathBuf) -> bool,com
     })
 }
 
+#[allow(dead_code)] //keeping for ebuging
 pub fn print_tree(root: &str, dir: &Directory) {
     const OTHER_CHILD: &str = "│   "; // prefix: pipe
     const OTHER_ENTRY: &str = "├── "; // connector: tee

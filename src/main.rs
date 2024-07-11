@@ -46,7 +46,7 @@ struct SphinxApp {
 }
 
 impl SphinxApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self{
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self{
         let mut a: SphinxApp = Default::default();
         a.explorer_dirs = dir_walk(0, &PathBuf::from(a.root_dir.clone()), is_dir, sort_by_name).unwrap();
         return a;
@@ -69,7 +69,7 @@ impl Default for SphinxApp {
 
 //UI definition
 impl eframe::App for SphinxApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         /////////////////////////Explorer///////////////////////////////////
         egui::SidePanel::left("project_explorer")
             .resizable(false)
@@ -100,8 +100,16 @@ impl eframe::App for SphinxApp {
             }
         );
         /////////////////////////Tools///////////////////////////////////
-        /////////////////////////Git////////////////////////////////////
+        /////////////////////////Git/////////////////////////////////////
         egui::TopBottomPanel::bottom("git_view")
+            .resizable(false)
+            .exact_height(ctx.screen_rect().height()*0.5)
+            .show(ctx, |frame| {
+                
+            }
+        );
+        /////////////////////////Ideas///////////////////////////////////
+        egui::TopBottomPanel::top("idea_view")
             .resizable(false)
             .exact_height(ctx.screen_rect().height()*0.5)
             .show(ctx, |frame| {
