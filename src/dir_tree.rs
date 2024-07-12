@@ -1,3 +1,4 @@
+// Definitions for Project/Directory-tree Widget
 use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::fs;
@@ -6,7 +7,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use egui::CollapsingHeader;
-use egui::Widget;
+
+use crate::AddDialog;
+
 
 
 #[derive(Default,Clone)]
@@ -14,7 +17,7 @@ pub struct Directory {
     pub name: String,
     pub entries: Vec<Directory>,
     pub depth: u32,
-    pub path: PathBuf,
+    pub path: String,
 }
 
 //filters
@@ -63,7 +66,7 @@ pub fn dir_walk(depth: u32,root: &PathBuf,filter: fn(name: &PathBuf) -> bool,com
         name: name,
         entries: directory,
         depth: depth,
-        path: root.to_owned()
+        path: root.to_str().unwrap().to_owned(),
     })
 }
 
@@ -101,57 +104,60 @@ pub fn print_tree(root: &str, dir: &Directory) {
 }
 
 //ui
-impl Widget for &mut Directory {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let Directory { name, entries ,depth, path} = self;
-        if entries.is_empty() {
-            let response = ui.selectable_label(false, name.as_str());
-            if response.clicked() {
-                open_folder(path);
-            }
-            response
-        } else {
-            let header = CollapsingHeader::new(name.as_str()).default_open(*depth < 2);
-            let id = ui.make_persistent_id(&name);
-            let response = header
-                .show(ui, |ui| {
-                    let mut iter = entries.iter_mut().peekable();
-                    let mut count = 0;
-                    while iter.peek().is_some() {
-                        if iter.peek().is_some_and(|n| n.entries.is_empty()) {
-                            ui.indent(0, |ui| {
-                                while let Some(node) =
-                                    iter.peek_mut().filter(|n| n.entries.is_empty())
-                                {
-                                    node.ui(ui);
-                                    iter.next();
-                                }
-                            });
-                        }
-                        if let Some(node) = iter.next() {
-                            count += 1;
-                            ui.push_id((&name, count), |ui| node.ui(ui));
-                        }
-                    }
-                });
-                let header_response = response.header_response;
 
-                if header_response.secondary_clicked() {
-                    ui.memory_mut(|mem| mem.open_popup(id));
-                }
-    
-                header_response.context_menu(|ui|{
-                    if ui.button("Open in Explorer").clicked() {
-                        open_folder(path);
-                        ui.close_menu();
-                    }
-                });
-    
-                header_response
+pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog) -> egui::Response {
+    let Directory { name, mut entries ,depth, path} = pnode.to_owned();
+    if entries.is_empty() {
+        let response = ui.selectable_label(false, name.as_str());
+        if response.clicked() {
+            open_folder(&PathBuf::from(path));
         }
+        response
+    } else {
+        let header = CollapsingHeader::new(name.as_str()).default_open(pnode.depth < 2);
+        let id = ui.make_persistent_id(&name);
+        let response = header
+            .show(ui, |ui| {
+                let mut iter = entries.iter_mut().peekable();
+                let mut count = 0;
+                while iter.peek().is_some() {
+                    if iter.peek().is_some_and(|n| n.entries.is_empty()) {
+                        ui.indent(0, |ui| {
+                            while let Some(node) =
+                                iter.peek_mut().filter(|n| n.entries.is_empty())
+                            {
+                                explorer_tree(node ,ui,add_dialog);
+                                iter.next();
+                            }
+                        });
+                    }
+                    if let Some(node) = iter.next() {
+                        count += 1;
+                        ui.push_id((&name, count), |ui| explorer_tree(node ,ui,add_dialog));
+                    }
+                }
+            });
+            let header_response = response.header_response;
+
+            header_response.context_menu(|ui|{
+                if ui.button("Open in Explorer").clicked() {
+                    open_folder(&PathBuf::from(path));
+                    ui.close_menu();
+                }
+                if ui.button("Quick add Project").clicked() {
+                    add_dialog.open = true;
+                    ui.close_menu();
+                }
+            });
+            
+
+            header_response
     }
 }
 
+
+
+//handlers
 fn open_folder(path: &PathBuf){
     #[cfg(target_os = "windows")]
     {

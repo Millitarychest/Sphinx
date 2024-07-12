@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod tree;
+mod dir_tree;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
@@ -8,7 +8,7 @@ use tokio::runtime::Runtime;
 use std::time::Duration;
 use eframe::egui;
 use egui::Widget;
-use tree::*;
+use dir_tree::*;
 
 fn main() -> eframe::Result {
     let rt = Runtime::new().expect("Unable to create Runtime");
@@ -38,11 +38,19 @@ fn main() -> eframe::Result {
 }
 
 //in ui vars
-struct SphinxApp { 
+struct SphinxApp {
+    add_dialog: AddDialog,
+
     tx: Sender<Directory>,
     rx: Receiver<Directory>,
+    
     root_dir: String,
     explorer_dirs: Directory
+}
+
+#[derive(Default,Clone, Copy)]
+struct AddDialog {
+    open: bool,
 }
 
 impl SphinxApp {
@@ -59,6 +67,7 @@ impl Default for SphinxApp {
         let (tx, rx): (Sender<Directory>, Receiver<Directory>) = std::sync::mpsc::channel();
 
         Self {
+            add_dialog: Default::default(),
             tx,
             rx,
             root_dir: "E:\\dev\\code".to_owned(),
@@ -75,6 +84,7 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_width(ctx.screen_rect().width()*0.6)
             .show(ctx, |frame| {
+                if(self.add_dialog.open){frame.disable()}
                 frame.horizontal(|ui|{
                     if ui.button("⟲").clicked() { 
                        refresh_explorer(&self.root_dir, self.tx.clone());
@@ -94,7 +104,9 @@ impl eframe::App for SphinxApp {
                         if let Ok(dir) = self.rx.try_recv() {
                             self.explorer_dirs = dir;
                         }
-                        self.explorer_dirs.ui(ui);
+                        let mut add_dialog = self.add_dialog;
+                        explorer_tree(&self.explorer_dirs, ui, &mut add_dialog);
+                        self.add_dialog = add_dialog;
                     });
                 })
             }
@@ -105,6 +117,7 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.screen_rect().height()*0.5)
             .show(ctx, |frame| {
+                if(self.add_dialog.open){frame.disable()}
                 
             }
         );
@@ -113,11 +126,25 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.screen_rect().height()*0.5)
             .show(ctx, |frame| {
+                if(self.add_dialog.open){frame.disable()}
                 
             }
         );
+        ////////////////////////Dialogs//////////////////////////////////
+        //////////////////////////Add////////////////////////////////////
+        if self.add_dialog.open {
+            egui::Window::new("Add Project..")
+                .fixed_size(egui::vec2(220f32, 100f32))
+                .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
+                .collapsible(false)
+                .open(&mut self.add_dialog.open)
+                .show(ctx, |ui| {
+                    
+                });
+        }
     }
 }
+
 
 //UI events
 fn refresh_explorer(root: &str, tx: Sender<Directory>) {

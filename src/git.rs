@@ -1,0 +1,1 @@
+// Definitions for git and the git view
