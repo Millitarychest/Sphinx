@@ -7,6 +7,7 @@ mod sphinx_git;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use egui_dropdown::DropDownBox;
+use sphinx_git::GitWidget;
 use tokio::runtime::Runtime;
 use std::time::Duration;
 use eframe::egui;
@@ -77,8 +78,7 @@ struct SphinxApp {
     rx: Receiver<Directory>,
     
     explorer_dirs: Directory,
-
-    
+    selected_project_path: String,
 }
 
 impl SphinxApp {
@@ -102,6 +102,7 @@ impl Default for SphinxApp {
             tx,
             rx,
             explorer_dirs: Default::default(),
+            selected_project_path: Default::default()
         }
     }
 }
@@ -146,7 +147,7 @@ impl eframe::App for SphinxApp {
                             self.explorer_dirs = dir;
                         }
                         let mut add_dialog = &mut self.add_dialog;
-                        explorer_tree(&self.explorer_dirs, ui, &mut add_dialog);
+                        explorer_tree(&self.explorer_dirs, ui, &mut add_dialog, &mut self.selected_project_path);
                         self.add_dialog = add_dialog.clone();
                     });
                 })
@@ -156,16 +157,20 @@ impl eframe::App for SphinxApp {
         /////////////////////////Git/////////////////////////////////////
         egui::TopBottomPanel::bottom("git_view")
             .resizable(false)
-            .exact_height(ctx.screen_rect().height()*0.5)
+            .exact_height(ctx.available_rect().height()*0.5)
             .show(ctx, |frame| {
                 if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
+                frame.vertical_centered(|ui| {ui.heading("Git history:");});
+                frame.separator();
+                let git_history = GitWidget::new(&PathBuf::from(&self.selected_project_path)).unwrap();
+                frame.add(git_history)
                 
             }
         );
         /////////////////////////Ideas///////////////////////////////////
         egui::TopBottomPanel::top("idea_view")
             .resizable(false)
-            .exact_height(ctx.screen_rect().height()*0.5)
+            .exact_height(ctx.available_rect().height())
             .show(ctx, |frame| {
                 if(self.add_dialog.open || self.app_settings.open){frame.disable()}
                 
@@ -201,6 +206,10 @@ impl eframe::App for SphinxApp {
                         .join(&self.add_dialog.lang)
                         .join(&self.add_dialog.category)
                         .join(&self.add_dialog.name), &self.add_dialog.lang);
+                        self.selected_project_path = PathBuf::from(&self.app_settings.root_dir)
+                            .join(&self.add_dialog.lang)
+                            .join(&self.add_dialog.category)
+                            .join(&self.add_dialog.name).to_str().unwrap().to_owned();
                         self.add_dialog.reset();
                     };
                 });

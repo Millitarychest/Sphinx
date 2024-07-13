@@ -108,7 +108,7 @@ pub fn print_tree(root: &str, dir: &Directory) {
 
 //ui
 
-pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog) -> egui::Response {
+pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog, selected_project_path: &mut String) -> egui::Response {
     let Directory { name, mut entries ,depth, path} = pnode.to_owned();
     if(pnode.depth == 2){
         if(!add_dialog.known_category.contains(&name)){
@@ -129,7 +129,10 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
             }
         });
         if response.double_clicked(){
-            open_folder(&PathBuf::from(path));
+            open_folder(&PathBuf::from(&path));
+        }
+        if response.clicked() {
+            *selected_project_path = path.clone();
         }
         response
     } else {
@@ -145,14 +148,14 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
                             while let Some(node) =
                                 iter.peek_mut().filter(|n| n.entries.is_empty())
                             {
-                                explorer_tree(node ,ui,add_dialog);
+                                explorer_tree(node ,ui,add_dialog, selected_project_path);
                                 iter.next();
                             }
                         });
                     }
                     if let Some(node) = iter.next() {
                         count += 1;
-                        ui.push_id((&name, count), |ui| explorer_tree(node ,ui,add_dialog));
+                        ui.push_id((&name, count), |ui| explorer_tree(node ,ui,add_dialog, selected_project_path));
                     }
                 }
             });
