@@ -110,6 +110,16 @@ pub fn print_tree(root: &str, dir: &Directory) {
 
 pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog) -> egui::Response {
     let Directory { name, mut entries ,depth, path} = pnode.to_owned();
+    if(pnode.depth == 2){
+        if(!add_dialog.known_category.contains(&name)){
+            add_dialog.known_category.push(name.clone())
+        }
+    }
+    else if (pnode.depth == 1) {
+        if(!add_dialog.known_langs.contains(&name)){
+            add_dialog.known_langs.push(name.clone())
+        }
+    }
     if entries.is_empty() {
         let response = ui.selectable_label(false, name.as_str());
         response.context_menu(|ui|{
@@ -118,7 +128,7 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
                 ui.close_menu();
             }
         });
-        if response.clicked() {
+        if response.double_clicked(){
             open_folder(&PathBuf::from(path));
         }
         response
@@ -150,11 +160,18 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
 
             header_response.context_menu(|ui|{
                 if ui.button("Open in Explorer").clicked() {
-                    open_folder(&PathBuf::from(path));
+                    open_folder(&PathBuf::from(&path));
                     ui.close_menu();
                 }
                 if ui.button("Quick add Project").clicked() {
                     add_dialog.open = true;
+                    if depth ==  1{
+                        add_dialog.lang = name.to_owned();
+                    }
+                    else if depth ==  2{
+                        add_dialog.lang = PathBuf::from(&path).parent().unwrap().file_name().unwrap().to_str().unwrap().to_owned();
+                        add_dialog.category = name.to_owned();
+                    } 
                     ui.close_menu();
                 }
             });
@@ -180,7 +197,7 @@ fn open_folder(path: &PathBuf){
 fn start_project(path: &PathBuf){
     #[cfg(target_os = "windows")]
     {
-        let script_path = path.join(PathBuf::from_str("./start.bat").unwrap());
+        let script_path = path.join(PathBuf::from_str("start.bat").unwrap());
         Command::new(script_path)
             .spawn()
             .expect("Failed to open Explorer");

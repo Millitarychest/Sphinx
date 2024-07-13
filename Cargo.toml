@@ -7,4 +7,6 @@ edition = "2021"
 [dependencies]
 eframe = "0.28.1"
 egui = "0.28.1"
+egui-dropdown = "0.10.0"
+git2 = "0.19.0"
 tokio = { version = "1", features = ["net", "rt-multi-thread", "time"] }

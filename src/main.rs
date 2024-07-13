@@ -2,9 +2,11 @@
 
 mod dir_tree;
 mod project;
+mod sphinx_git;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
+use egui_dropdown::DropDownBox;
 use tokio::runtime::Runtime;
 use std::time::Duration;
 use eframe::egui;
@@ -38,23 +40,17 @@ fn main() -> eframe::Result {
     )
 }
 
-//in ui vars
-struct SphinxApp {
-    add_dialog: AddDialog,
-
-    tx: Sender<Directory>,
-    rx: Receiver<Directory>,
-    
-    root_dir: String,
-    explorer_dirs: Directory
-}
-
 #[derive(Default,Clone)]
 struct AddDialog {
+    //ui state
     open: bool,
+    //autocomplete
+    known_langs: Vec<String>,
+    known_category: Vec<String>,
+    //project params
     lang: String,
     category: String,
-    name: String
+    name: String,
 }
 
 impl AddDialog {
@@ -66,13 +62,32 @@ impl AddDialog {
     }
 }
 
+#[derive(Default)]
+struct AppSettings{
+    open: bool,
+    git_ssh_key_path: String,
+    root_dir: String,
+}
+
+struct SphinxApp {
+    add_dialog: AddDialog,
+    app_settings: AppSettings,
+
+    tx: Sender<Directory>,
+    rx: Receiver<Directory>,
+    
+    explorer_dirs: Directory,
+
+    
+}
 
 impl SphinxApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self{
-        let mut a: SphinxApp = Default::default();
-        a.explorer_dirs = dir_walk(0, &PathBuf::from(a.root_dir.clone()), is_dir, sort_by_name).unwrap();
-        a.add_dialog.reset();
-        return a;
+        let mut app: SphinxApp = Default::default();
+        app.app_settings.root_dir = "E:\\dev\\code".to_owned();
+        app.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
+        app.add_dialog.reset();
+        return app;
     }
 }
 
@@ -83,10 +98,10 @@ impl Default for SphinxApp {
 
         Self {
             add_dialog: Default::default(),
+            app_settings: Default::default(),
             tx,
             rx,
-            root_dir: "E:\\dev\\code".to_owned(),
-            explorer_dirs: Default::default()
+            explorer_dirs: Default::default(),
         }
     }
 }
@@ -94,18 +109,27 @@ impl Default for SphinxApp {
 //UI definition
 impl eframe::App for SphinxApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        /////////////////////////Menu-Bar///////////////////////////////////
+        egui::TopBottomPanel::top("menu_bar")
+        .resizable(false).exact_height(25.0)
+        .show(ctx, |frame|{
+            if(self.add_dialog.open  || self.app_settings.open ){frame.disable()}
+            if frame.button("settings").clicked(){
+                self.app_settings.open = true;
+            }
+        });
         /////////////////////////Explorer///////////////////////////////////
         egui::SidePanel::left("project_explorer")
             .resizable(false)
             .exact_width(ctx.screen_rect().width()*0.6)
             .show(ctx, |frame| {
-                if(self.add_dialog.open){frame.disable()}
+                if(self.add_dialog.open  || self.app_settings.open ){frame.disable()}
                 frame.horizontal(|ui|{
                     if ui.button("⟲").clicked() { 
-                       refresh_explorer(&self.root_dir, self.tx.clone());
+                       refresh_explorer(&self.app_settings.root_dir, self.tx.clone());
                     }
                     ui.add(egui::Label::new("Root Dir:"));
-                    ui.add(egui::TextEdit::singleline(&mut self.root_dir).desired_width(f32::INFINITY));
+                    ui.add(egui::TextEdit::singleline(&mut self.app_settings.root_dir).desired_width(f32::INFINITY));
                 });
                 frame.separator();//-------------
                 frame.with_layout(egui::Layout::bottom_up(egui::Align::BOTTOM), |ui| {
@@ -134,7 +158,7 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.screen_rect().height()*0.5)
             .show(ctx, |frame| {
-                if(self.add_dialog.open){frame.disable()}
+                if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
                 
             }
         );
@@ -143,7 +167,7 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.screen_rect().height()*0.5)
             .show(ctx, |frame| {
-                if(self.add_dialog.open){frame.disable()}
+                if(self.add_dialog.open || self.app_settings.open){frame.disable()}
                 
             }
         );
@@ -158,18 +182,22 @@ impl eframe::App for SphinxApp {
                 .open(&mut open)
                 .show(ctx, |ui| {
                     ui.label("Language:");
-                    // change to drop down with known "Common names" e.g. C#, C++ intead of C-Sharp
-                    ui.text_edit_singleline(&mut self.add_dialog.lang); 
+                    ui.add(DropDownBox::from_iter(&self.add_dialog.known_langs,
+                         "lang_dropbox",
+                         &mut self.add_dialog.lang, 
+                         |ui, text| ui.selectable_label(false, text)));
                     ui.label("Category:");
-                    //add autocomplete based on existing "Categories" e.g. names of folders in the (specific) lang folder
-                    ui.text_edit_singleline(&mut self.add_dialog.category);
+                    ui.add(DropDownBox::from_iter(&self.add_dialog.known_category,
+                        "category_dropbox",
+                        &mut self.add_dialog.category, 
+                        |ui, text| ui.selectable_label(false, text)));
                     ui.label("Name:");
                     ui.text_edit_singleline(&mut self.add_dialog.name);
                     if ui.add_sized(
                         [ui.available_width(),ui.available_height()*0.1],
                         egui::Button::new("Create project")
                     ).clicked() {
-                        create_project(PathBuf::from(&self.root_dir)
+                        create_project(PathBuf::from(&self.app_settings.root_dir)
                         .join(&self.add_dialog.lang)
                         .join(&self.add_dialog.category)
                         .join(&self.add_dialog.name), &self.add_dialog.lang);
@@ -178,6 +206,23 @@ impl eframe::App for SphinxApp {
                 });
             if(open==false){
                 self.add_dialog.open = open;
+                self.add_dialog.reset();
+            }
+        }
+        ////////////////////////Settings/////////////////////////////////
+        else if self.app_settings.open {
+            let mut open = self.app_settings.open;
+            egui::Window::new("Sphinx Settings")
+                .fixed_size(egui::vec2(220f32, 100f32))
+                .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
+                .collapsible(false)
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label("Git SSH-key:");
+                    ui.text_edit_singleline(&mut self.app_settings.git_ssh_key_path);
+                });
+            if(open==false){
+                self.app_settings.open = open;
             }
         }
     }
