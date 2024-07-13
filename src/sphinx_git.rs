@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use egui::{Ui,Widget};
+use egui::{Label, Ui, Widget};
 use git2::{BranchType, Error, Oid, Repository};
 
 // Definitions for git and the git view
@@ -27,7 +27,6 @@ fn create_initial_commit(repo: &Repository) -> Result<(), Error> {
 pub struct GitWidget {
     repo: Repository,
     commits: Vec<Commit>,
-    scroll: f32,
 }
 
 struct Commit {
@@ -43,7 +42,6 @@ impl GitWidget {
         let mut widget = GitWidget {
             repo,
             commits: Vec::new(),
-            scroll: 0.0,
         };
         widget.update_commits()?;
         Ok(widget)
@@ -97,7 +95,7 @@ impl Widget for GitWidget {
                             if commit.is_remote_head {
                                 ui.label("☁️");
                             }
-                            ui.label(format!("{}",commit.message));
+                            ui.add(Label::new(format!("{}",commit.message)).truncate())
                         });
                         
                         if index < self.commits.len() - 1 {
