@@ -1,14 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod dir_tree;
+mod project;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use tokio::runtime::Runtime;
 use std::time::Duration;
 use eframe::egui;
-use egui::Widget;
 use dir_tree::*;
+use project::*;
 
 fn main() -> eframe::Result {
     let rt = Runtime::new().expect("Unable to create Runtime");
@@ -48,15 +49,29 @@ struct SphinxApp {
     explorer_dirs: Directory
 }
 
-#[derive(Default,Clone, Copy)]
+#[derive(Default,Clone)]
 struct AddDialog {
     open: bool,
+    lang: String,
+    category: String,
+    name: String
 }
+
+impl AddDialog {
+    fn reset(&mut self){
+            self.open = false;
+            self.lang = Default::default();
+            self.category = Default::default();
+            self.name = "new_project".to_owned();
+    }
+}
+
 
 impl SphinxApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self{
         let mut a: SphinxApp = Default::default();
         a.explorer_dirs = dir_walk(0, &PathBuf::from(a.root_dir.clone()), is_dir, sort_by_name).unwrap();
+        a.add_dialog.reset();
         return a;
     }
 }
@@ -94,19 +109,21 @@ impl eframe::App for SphinxApp {
                 });
                 frame.separator();//-------------
                 frame.with_layout(egui::Layout::bottom_up(egui::Align::BOTTOM), |ui| {
-                    ui.add_sized(
+                    if ui.add_sized(
                         [ui.available_width(),ui.available_height()*0.1],
                         egui::Button::new("Add new project")
-                    );
+                    ).clicked() {
+                        self.add_dialog.open = true;
+                    };
                     ui.separator();//-------------
                     egui::ScrollArea::vertical().max_height(f32::INFINITY).show(ui, |ui|{
                         ui.visuals_mut().indent_has_left_vline = true;
                         if let Ok(dir) = self.rx.try_recv() {
                             self.explorer_dirs = dir;
                         }
-                        let mut add_dialog = self.add_dialog;
+                        let mut add_dialog = &mut self.add_dialog;
                         explorer_tree(&self.explorer_dirs, ui, &mut add_dialog);
-                        self.add_dialog = add_dialog;
+                        self.add_dialog = add_dialog.clone();
                     });
                 })
             }
@@ -133,14 +150,35 @@ impl eframe::App for SphinxApp {
         ////////////////////////Dialogs//////////////////////////////////
         //////////////////////////Add////////////////////////////////////
         if self.add_dialog.open {
+            let mut open = self.add_dialog.open;
             egui::Window::new("Add Project..")
                 .fixed_size(egui::vec2(220f32, 100f32))
                 .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
                 .collapsible(false)
-                .open(&mut self.add_dialog.open)
+                .open(&mut open)
                 .show(ctx, |ui| {
-                    
+                    ui.label("Language:");
+                    // change to drop down with known "Common names" e.g. C#, C++ intead of C-Sharp
+                    ui.text_edit_singleline(&mut self.add_dialog.lang); 
+                    ui.label("Category:");
+                    //add autocomplete based on existing "Categories" e.g. names of folders in the (specific) lang folder
+                    ui.text_edit_singleline(&mut self.add_dialog.category);
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut self.add_dialog.name);
+                    if ui.add_sized(
+                        [ui.available_width(),ui.available_height()*0.1],
+                        egui::Button::new("Create project")
+                    ).clicked() {
+                        create_project(PathBuf::from(&self.root_dir)
+                        .join(&self.add_dialog.lang)
+                        .join(&self.add_dialog.category)
+                        .join(&self.add_dialog.name), &self.add_dialog.lang);
+                        self.add_dialog.reset();
+                    };
                 });
+            if(open==false){
+                self.add_dialog.open = open;
+            }
         }
     }
 }

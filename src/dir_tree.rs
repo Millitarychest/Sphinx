@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 // Definitions for Project/Directory-tree Widget
 use std::cmp::Ordering;
 use std::ffi::OsStr;
@@ -5,6 +7,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
+use std::str::FromStr;
 
 use egui::CollapsingHeader;
 
@@ -109,6 +112,12 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
     let Directory { name, mut entries ,depth, path} = pnode.to_owned();
     if entries.is_empty() {
         let response = ui.selectable_label(false, name.as_str());
+        response.context_menu(|ui|{
+            if ui.button("Run latest").clicked() {
+                start_project(&PathBuf::from(path.clone()));
+                ui.close_menu();
+            }
+        });
         if response.clicked() {
             open_folder(&PathBuf::from(path));
         }
@@ -163,6 +172,16 @@ fn open_folder(path: &PathBuf){
     {
         Command::new("explorer")
             .arg(path)
+            .spawn()
+            .expect("Failed to open Explorer");
+    }
+}
+
+fn start_project(path: &PathBuf){
+    #[cfg(target_os = "windows")]
+    {
+        let script_path = path.join(PathBuf::from_str("./start.bat").unwrap());
+        Command::new(script_path)
             .spawn()
             .expect("Failed to open Explorer");
     }
