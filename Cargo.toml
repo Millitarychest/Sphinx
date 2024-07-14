@@ -5,8 +5,11 @@ authors = ["Paul Lohberg"]
 edition = "2021"
 
 [dependencies]
-eframe = "0.28.1"
+config = "0.14.0"
+eframe = {version="0.28.1", features=["persistence"]}
 egui = "0.28.1"
 egui-dropdown = "0.10.0"
 git2 = "0.19.0"
+serde = "1.0.204"
+serde_derive = "1.0.204"
 tokio = { version = "1", features = ["net", "rt-multi-thread", "time"] }

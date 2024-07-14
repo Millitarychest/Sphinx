@@ -137,7 +137,6 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
         response
     } else {
         let header = CollapsingHeader::new(name.as_str()).default_open(pnode.depth < 2);
-        let id = ui.make_persistent_id(&name);
         let response = header
             .show(ui, |ui| {
                 let mut iter = entries.iter_mut().peekable();

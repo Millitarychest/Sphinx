@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[allow(unused_parens)]
 mod dir_tree;
+#[allow(unused_parens)]
 mod project;
+#[allow(unused_parens)]
 mod sphinx_git;
 
 use std::path::PathBuf;
@@ -11,6 +14,7 @@ use sphinx_git::GitWidget;
 use tokio::runtime::Runtime;
 use std::time::Duration;
 use eframe::egui;
+
 use dir_tree::*;
 use project::*;
 
@@ -63,29 +67,56 @@ impl AddDialog {
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 #[derive(Default)]
 struct AppSettings{
     open: bool,
-    git_ssh_key_path: String,
     root_dir: String,
+    selected_project_path: String,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+#[derive(Default,Clone)]
+struct CommitSettings{
+    git_user: String,
+    git_mail: String,
+}
+
+#[derive(Default)]
+struct AppState{
+    git_history: GitWidget,
+    explorer_dirs: Directory,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 struct SphinxApp {
+    #[serde(skip)]
     add_dialog: AddDialog,
     app_settings: AppSettings,
+    commit_settings: CommitSettings,
+    #[serde(skip)]
+    app_state: AppState,
 
+    #[serde(skip)]
     tx: Sender<Directory>,
+    #[serde(skip)]
     rx: Receiver<Directory>,
-    
-    explorer_dirs: Directory,
-    selected_project_path: String,
 }
 
 impl SphinxApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self{
+        if let Some(storage) = _cc.storage {
+            let mut app: SphinxApp = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            app.app_state.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
+            app.add_dialog.reset();
+            return app;
+        }
         let mut app: SphinxApp = Default::default();
-        app.app_settings.root_dir = "E:\\dev\\code".to_owned();
-        app.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
+        app.app_settings.root_dir = ".".to_owned();
+        app.app_state.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
         app.add_dialog.reset();
         return app;
     }
@@ -101,20 +132,25 @@ impl Default for SphinxApp {
             app_settings: Default::default(),
             tx,
             rx,
-            explorer_dirs: Default::default(),
-            selected_project_path: Default::default()
+            app_state: Default::default(),
+            commit_settings: Default::default(),
         }
     }
 }
 
 //UI definition
 impl eframe::App for SphinxApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         /////////////////////////Menu-Bar///////////////////////////////////
         egui::TopBottomPanel::top("menu_bar")
         .resizable(false).exact_height(25.0)
         .show(ctx, |frame|{
-            if(self.add_dialog.open  || self.app_settings.open ){frame.disable()}
+            #[allow(unused_parens)]
+            if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
             if frame.button("settings").clicked(){
                 self.app_settings.open = true;
             }
@@ -124,7 +160,8 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_width(ctx.screen_rect().width()*0.6)
             .show(ctx, |frame| {
-                if(self.add_dialog.open  || self.app_settings.open ){frame.disable()}
+                #[allow(unused_parens)]
+                if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
                 frame.horizontal(|ui|{
                     if ui.button("⟲").clicked() { 
                        refresh_explorer(&self.app_settings.root_dir, self.tx.clone());
@@ -144,10 +181,10 @@ impl eframe::App for SphinxApp {
                     egui::ScrollArea::vertical().max_height(f32::INFINITY).show(ui, |ui|{
                         ui.visuals_mut().indent_has_left_vline = true;
                         if let Ok(dir) = self.rx.try_recv() {
-                            self.explorer_dirs = dir;
+                            self.app_state.explorer_dirs = dir;
                         }
                         let mut add_dialog = &mut self.add_dialog;
-                        explorer_tree(&self.explorer_dirs, ui, &mut add_dialog, &mut self.selected_project_path);
+                        explorer_tree(&self.app_state.explorer_dirs, ui, &mut add_dialog, &mut self.app_settings.selected_project_path);
                         self.add_dialog = add_dialog.clone();
                     });
                 })
@@ -159,12 +196,18 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.available_rect().height()*0.5)
             .show(ctx, |frame| {
+                #[allow(unused_parens)]
                 if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
                 frame.vertical_centered(|ui| {ui.heading("Git history:");});
                 frame.separator();
-                let git_history = GitWidget::new(&PathBuf::from(&self.selected_project_path)).unwrap();
-                frame.add(git_history)
-                
+                #[allow(unused_parens)]
+                if(self.app_settings.selected_project_path != String::default()){
+                    let git_history = GitWidget::new(&PathBuf::from(&self.app_settings.selected_project_path), &self.commit_settings, self.app_state.git_history.clone()).unwrap();
+                    self.app_state.git_history = git_history.clone();
+                    frame.add(git_history);
+                }else {
+                    frame.vertical_centered(|ui| {ui.label("No project selected")});
+                }
             }
         );
         /////////////////////////Ideas///////////////////////////////////
@@ -172,6 +215,7 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.available_rect().height())
             .show(ctx, |frame| {
+                #[allow(unused_parens)]
                 if(self.add_dialog.open || self.app_settings.open){frame.disable()}
                 
             }
@@ -206,13 +250,14 @@ impl eframe::App for SphinxApp {
                         .join(&self.add_dialog.lang)
                         .join(&self.add_dialog.category)
                         .join(&self.add_dialog.name), &self.add_dialog.lang);
-                        self.selected_project_path = PathBuf::from(&self.app_settings.root_dir)
+                        self.app_settings.selected_project_path = PathBuf::from(&self.app_settings.root_dir)
                             .join(&self.add_dialog.lang)
                             .join(&self.add_dialog.category)
                             .join(&self.add_dialog.name).to_str().unwrap().to_owned();
                         self.add_dialog.reset();
                     };
                 });
+            #[allow(unused_parens)]
             if(open==false){
                 self.add_dialog.open = open;
                 self.add_dialog.reset();
@@ -227,9 +272,14 @@ impl eframe::App for SphinxApp {
                 .collapsible(false)
                 .open(&mut open)
                 .show(ctx, |ui| {
-                    ui.label("Git SSH-key:");
-                    ui.text_edit_singleline(&mut self.app_settings.git_ssh_key_path);
+                    ui.heading("Commit settings:");
+                    ui.label("Git User:");
+                    ui.text_edit_singleline(&mut self.commit_settings.git_user);
+                    ui.label("Git mail:");
+                    ui.text_edit_singleline(&mut self.commit_settings.git_mail);
+
                 });
+            #[allow(unused_parens)]
             if(open==false){
                 self.app_settings.open = open;
             }

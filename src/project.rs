@@ -1,7 +1,7 @@
-use crate::sphinx_git::{self, git_init};
+use crate::sphinx_git::git_init;
 // Definitions related to "projects"
 
-use std::{fs::{create_dir_all, File}, io::Write, path::PathBuf, process::Command};
+use std::{fs::create_dir_all, path::PathBuf, process::Command};
 
 
 pub fn create_project(path: PathBuf, lang: &str){ //quick creation

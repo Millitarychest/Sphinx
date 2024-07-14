@@ -9,3 +9,6 @@ Sphinx is a programming projectmanagment software writen in rust and the success
 
 ### How it looks
 ![layout_sketch](./doc/assets/layout_sketch.png)
+
+### Todo:
+Dies on big repos
