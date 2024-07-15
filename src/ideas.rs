@@ -1,6 +1,6 @@
-use std::{error::Error, sync::{Arc, Mutex}, time::{Duration, Instant}};
+use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
 
-use egui::{Frame, Label, Vec2, Widget};
+use egui::{Frame, Label,Widget};
 use sqlx::mysql::MySqlPool;
 
 use crate::DbSettings;
@@ -35,7 +35,7 @@ impl Default for IdeasBoard {
 
 impl IdeasBoard {
     pub fn new(settings: &DbSettings, ideas: IdeasBoard) -> Self {
-        if(Instant::now().duration_since(ideas.last_update) < Duration::from_secs(20)){
+        if Instant::now().duration_since(ideas.last_update) < Duration::from_secs(20) {
             return ideas;
         }
         else {
@@ -87,8 +87,6 @@ impl Widget for IdeasBoard{
                                 .rounding(4.0)
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
-
-                                    let size = Vec2::new(32.0, 32.0);
                                     ui.heading(&idea.title);
                                     ui.add(Label::new(&idea.description).truncate())
                                 });

@@ -1,12 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[allow(unused_parens)]
+
 mod dir_tree;
-#[allow(unused_parens)]
+
 mod project;
-#[allow(unused_parens)]
+
 mod sphinx_git;
-#[allow(unused_parens)]
+
 mod ideas;
 
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ use egui_dropdown::DropDownBox;
 use sphinx_git::GitWidget;
 use sqlx::MySqlPool;
 use tokio::runtime::Runtime;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use eframe::egui;
 
 use dir_tree::*;
@@ -134,7 +134,7 @@ impl SphinxApp {
         if let Some(storage) = _cc.storage {
             let mut app: SphinxApp = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
             let db_setting = app.app_settings.db_settings.clone();
-            if(app.app_settings.db_settings.db_url != String::default()){
+            if app.app_settings.db_settings.db_url != String::default() {
                 app.app_settings.db_settings.db_pool = Some(create_db_pool(&db_setting));
             }
             app.app_state.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
@@ -175,8 +175,8 @@ impl eframe::App for SphinxApp {
         egui::TopBottomPanel::top("menu_bar")
         .resizable(false).exact_height(25.0)
         .show(ctx, |frame|{
-            #[allow(unused_parens)]
-            if(self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
+            
+            if self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open {frame.disable()}
             if frame.button("settings").clicked(){
                 self.app_state.settings_open = true;
             }
@@ -186,8 +186,8 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_width(ctx.screen_rect().width()*0.6)
             .show(ctx, |frame| {
-                #[allow(unused_parens)]
-                if(self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
+                
+                if self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open {frame.disable()}
                 frame.horizontal(|ui|{
                     if ui.button("⟲").clicked() { 
                        refresh_explorer(&self.app_settings.root_dir, self.tx.clone());
@@ -222,12 +222,12 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.available_rect().height()*0.5)
             .show(ctx, |frame| {
-                #[allow(unused_parens)]
-                if(self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
+                
+                if self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open {frame.disable()}
                 frame.vertical_centered(|ui| {ui.heading("Git history:");});
                 frame.separator();
-                #[allow(unused_parens)]
-                if(self.app_settings.selected_project_path != String::default()){
+                
+                if self.app_settings.selected_project_path != String::default() {
                     let git_history = GitWidget::new(&PathBuf::from(&self.app_settings.selected_project_path), &self.app_settings.commit_settings, self.app_state.git_history.clone()).unwrap();
                     self.app_state.git_history = git_history.clone();
                     frame.add(git_history);
@@ -241,10 +241,10 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.available_rect().height())
             .show(ctx, |frame| {
-                #[allow(unused_parens)]
-                if(self.app_state.project_open || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
-                if(self.app_settings.db_settings.db_url != String::default()){
-                    if(self.app_settings.db_settings.db_pool.is_some()){
+                
+                if self.app_state.project_open || self.app_state.settings_open || self.app_state.idea_open {frame.disable()}
+                if self.app_settings.db_settings.db_url != String::default() {
+                    if self.app_settings.db_settings.db_pool.is_some() {
                         let ideas_board = IdeasBoard::new(&self.app_settings.db_settings, self.app_state.idea_board.clone());
                         self.app_state.idea_board = ideas_board.clone();
                         frame.add(ideas_board);
@@ -295,8 +295,8 @@ impl eframe::App for SphinxApp {
                         self.add_dialog.reset();
                     };
                 });
-            #[allow(unused_parens)]
-            if(open==false){
+            
+            if open==false {
                 self.app_state.project_open = open;
                 self.add_dialog.reset();
             }
@@ -320,8 +320,8 @@ impl eframe::App for SphinxApp {
                     ui.label("DB-Url:");
                     ui.text_edit_singleline(&mut self.app_settings.db_settings.db_url);
                 });
-            #[allow(unused_parens)]
-            if(open==false){
+            
+            if open==false {
                 self.app_state.settings_open = open;
             }
         }
@@ -333,11 +333,11 @@ impl eframe::App for SphinxApp {
                 .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
                 .collapsible(false)
                 .open(&mut open)
-                .show(ctx, |ui| {
+                .show(ctx, |_ui| {
                     
                 });
-            #[allow(unused_parens)]
-            if(open==false){
+            
+            if open==false {
                 self.app_state.idea_open = open;
             }
         }

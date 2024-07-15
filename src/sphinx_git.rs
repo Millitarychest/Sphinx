@@ -96,7 +96,7 @@ impl GitWidget {
             settings: git_settings.clone(),
             last_update: Instant::now()
         };
-        if (repo_path != git.repo || Instant::now().duration_since(git.last_update)>Duration::from_secs(20)){
+        if repo_path != git.repo || Instant::now().duration_since(git.last_update)>Duration::from_secs(20) {
             widget.update_commits()?;
             Ok(widget)
         }
@@ -171,7 +171,7 @@ impl Widget for GitWidget {
                     ui.allocate_space(ui.available_size()); // Push buttons to the bottom
                 });
                 ui.horizontal(|ui| {
-                    let button_width = (ui.available_width() - button_padding); 
+                    let button_width = ui.available_width() - button_padding; 
                     if ui.add_sized([button_width, button_height], egui::Button::new("Commit")).clicked() {
                         commit(Repository::open(&self.repo).unwrap_or(git_init(self.repo.clone())), self.settings);
                         println!("Push clicked");

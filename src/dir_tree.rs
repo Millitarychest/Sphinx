@@ -13,8 +13,6 @@ use std::sync::mpsc::Sender;
 use egui::CollapsingHeader;
 
 use crate::AddDialog;
-use crate::AppSettings;
-use crate::AppState;
 
 
 
@@ -122,13 +120,13 @@ pub fn refresh_explorer(root: &str, tx: Sender<Directory>) {
 
 pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog, app_state_open: &mut bool ,selected_project_path: &mut String) -> egui::Response {
     let Directory { name, mut entries ,depth, path} = pnode.to_owned();
-    if(pnode.depth == 2){
-        if(!add_dialog.known_category.contains(&name)){
+    if pnode.depth == 2 {
+        if !add_dialog.known_category.contains(&name) {
             add_dialog.known_category.push(name.clone())
         }
     }
-    else if (pnode.depth == 1) {
-        if(!add_dialog.known_langs.contains(&name)){
+    else if pnode.depth == 1 {
+        if !add_dialog.known_langs.contains(&name) {
             add_dialog.known_langs.push(name.clone())
         }
     }
