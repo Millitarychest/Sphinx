@@ -68,9 +68,16 @@ impl AddDialog {
     }
 }
 
+#[derive(Default,Clone)]
+struct AddIdea {
+    lang: String,
+    description: String,
+    title: String,
+}
+
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
-#[derive(Default)]
+#[derive(Default,Clone)]
 struct AppSettings{
     root_dir: String,
     selected_project_path: String,
@@ -118,6 +125,8 @@ struct AppState{
 struct SphinxApp {
     #[serde(skip)]
     add_dialog: AddDialog,
+    #[serde(skip)]
+    add_idea: AddIdea,
     app_settings: AppSettings,
     
     #[serde(skip)]
@@ -157,6 +166,7 @@ impl Default for SphinxApp {
         Self {
             add_dialog: Default::default(),
             app_settings: Default::default(),
+            add_idea: Default::default(),
             tx,
             rx,
             app_state: Default::default(),
@@ -241,8 +251,12 @@ impl eframe::App for SphinxApp {
             .resizable(false)
             .exact_height(ctx.available_rect().height())
             .show(ctx, |frame| {
-                
                 if self.app_state.project_open || self.app_state.settings_open || self.app_state.idea_open {frame.disable()}
+                frame.horizontal(|ui| {
+                    let button_width = ui.available_width(); 
+                    if ui.add_sized([button_width, 30.0], egui::Button::new("Add Idea")).clicked() {
+                        self.app_state.idea_open = true;                    }
+                });
                 if self.app_settings.db_settings.db_url != String::default() {
                     if self.app_settings.db_settings.db_pool.is_some() {
                         let ideas_board = IdeasBoard::new(&self.app_settings.db_settings, self.app_state.idea_board.clone());
@@ -333,8 +347,28 @@ impl eframe::App for SphinxApp {
                 .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
                 .collapsible(false)
                 .open(&mut open)
-                .show(ctx, |_ui| {
-                    
+                .show(ctx, |ui| {
+                    ui.label("Title");
+                    ui.add(egui::TextEdit::singleline(&mut self.add_idea.title).char_limit(50).hint_text("Title: max 50 chars"));
+                    ui.label("Description");
+                    ui.add(egui::TextEdit::multiline(&mut self.add_idea.description).char_limit(250).hint_text("Description: max 250 chars"));
+                    ui.label("Suggested Language:");
+                    ui.add(DropDownBox::from_iter(&self.add_dialog.known_langs,
+                         "lang_dropbox",
+                         &mut self.add_idea.lang, 
+                         |ui, text| ui.selectable_label(false, text)));
+                    if ui.button("submit").clicked(){
+                        if self.app_settings.db_settings.db_url != String::default() {
+                            if self.app_settings.db_settings.db_pool.is_some() {
+                                let settings = self.app_settings.clone();
+                                let idea = self.add_idea.clone();
+                                tokio::spawn(async move {
+                                    insert_idea(settings.db_settings, &idea).await;
+                                });
+                                self.app_state.idea_open = false;
+                            }
+                        }
+                    }
                 });
             
             if open==false {
