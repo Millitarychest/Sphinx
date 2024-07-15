@@ -8,10 +8,13 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
+use std::sync::mpsc::Sender;
 
 use egui::CollapsingHeader;
 
 use crate::AddDialog;
+use crate::AppSettings;
+use crate::AppState;
 
 
 
@@ -106,9 +109,18 @@ pub fn print_tree(root: &str, dir: &Directory) {
     }
 }
 
+pub fn refresh_explorer(root: &str, tx: Sender<Directory>) {
+    let path = PathBuf::from(root);
+    tokio::spawn(async move {
+        let dir: Directory = dir_walk(0,&path, is_dir, sort_by_name).unwrap();
+        let _ = tx.send(dir);
+    });
+    //print_tree(&root, &dir);
+}
+
 //ui
 
-pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog, selected_project_path: &mut String) -> egui::Response {
+pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddDialog, app_state_open: &mut bool ,selected_project_path: &mut String) -> egui::Response {
     let Directory { name, mut entries ,depth, path} = pnode.to_owned();
     if(pnode.depth == 2){
         if(!add_dialog.known_category.contains(&name)){
@@ -147,14 +159,14 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
                             while let Some(node) =
                                 iter.peek_mut().filter(|n| n.entries.is_empty())
                             {
-                                explorer_tree(node ,ui,add_dialog, selected_project_path);
+                                explorer_tree(node ,ui,add_dialog, app_state_open ,selected_project_path);
                                 iter.next();
                             }
                         });
                     }
                     if let Some(node) = iter.next() {
                         count += 1;
-                        ui.push_id((&name, count), |ui| explorer_tree(node ,ui,add_dialog, selected_project_path));
+                        ui.push_id((&name, count), |ui| explorer_tree(node ,ui,add_dialog, app_state_open , selected_project_path));
                     }
                 }
             });
@@ -166,7 +178,7 @@ pub fn explorer_tree(pnode: &Directory, ui: &mut egui::Ui, add_dialog: &mut AddD
                     ui.close_menu();
                 }
                 if ui.button("Quick add Project").clicked() {
-                    add_dialog.open = true;
+                    *app_state_open = true;
                     if depth ==  1{
                         add_dialog.lang = name.to_owned();
                     }

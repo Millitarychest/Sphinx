@@ -7,6 +7,10 @@ Sphinx is a programming projectmanagment software writen in rust and the success
 - Quick project setup (planed)
 - Todo / Idea tracking (planed)
 
+### Requirements
+- Sphinx expects the local folder structure in this format root>language>category>project
+    - so for sphinx it would be root>Rust>Project_Manager>Sphinx
+
 ### How it looks
 ![layout_sketch](./doc/assets/layout_sketch.png)
 

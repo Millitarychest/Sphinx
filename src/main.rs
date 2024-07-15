@@ -6,17 +6,21 @@ mod dir_tree;
 mod project;
 #[allow(unused_parens)]
 mod sphinx_git;
+#[allow(unused_parens)]
+mod ideas;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use egui_dropdown::DropDownBox;
 use sphinx_git::GitWidget;
+use sqlx::MySqlPool;
 use tokio::runtime::Runtime;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use eframe::egui;
 
 use dir_tree::*;
 use project::*;
+use ideas::*;
 
 fn main() -> eframe::Result {
     let rt = Runtime::new().expect("Unable to create Runtime");
@@ -47,8 +51,6 @@ fn main() -> eframe::Result {
 
 #[derive(Default,Clone)]
 struct AddDialog {
-    //ui state
-    open: bool,
     //autocomplete
     known_langs: Vec<String>,
     known_category: Vec<String>,
@@ -60,7 +62,6 @@ struct AddDialog {
 
 impl AddDialog {
     fn reset(&mut self){
-            self.open = false;
             self.lang = Default::default();
             self.category = Default::default();
             self.name = "new_project".to_owned();
@@ -71,9 +72,10 @@ impl AddDialog {
 #[serde(default)]
 #[derive(Default)]
 struct AppSettings{
-    open: bool,
     root_dir: String,
     selected_project_path: String,
+    commit_settings: CommitSettings,
+    db_settings: DbSettings,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -84,10 +86,31 @@ struct CommitSettings{
     git_mail: String,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+#[derive(Clone)]
+struct DbSettings{
+    db_url: String,
+    #[serde(skip)]
+    db_pool: Option<MySqlPool>,
+}
+impl Default for DbSettings{
+    fn default() -> Self {
+        Self { 
+            db_url: Default::default(),
+            db_pool: None,
+        }
+    }
+}
+
 #[derive(Default)]
 struct AppState{
+    settings_open: bool,
+    project_open: bool,
+    idea_open: bool,
     git_history: GitWidget,
     explorer_dirs: Directory,
+    idea_board: IdeasBoard,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -96,7 +119,7 @@ struct SphinxApp {
     #[serde(skip)]
     add_dialog: AddDialog,
     app_settings: AppSettings,
-    commit_settings: CommitSettings,
+    
     #[serde(skip)]
     app_state: AppState,
 
@@ -110,6 +133,10 @@ impl SphinxApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self{
         if let Some(storage) = _cc.storage {
             let mut app: SphinxApp = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            let db_setting = app.app_settings.db_settings.clone();
+            if(app.app_settings.db_settings.db_url != String::default()){
+                app.app_settings.db_settings.db_pool = Some(create_db_pool(&db_setting));
+            }
             app.app_state.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
             app.add_dialog.reset();
             return app;
@@ -133,7 +160,6 @@ impl Default for SphinxApp {
             tx,
             rx,
             app_state: Default::default(),
-            commit_settings: Default::default(),
         }
     }
 }
@@ -150,9 +176,9 @@ impl eframe::App for SphinxApp {
         .resizable(false).exact_height(25.0)
         .show(ctx, |frame|{
             #[allow(unused_parens)]
-            if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
+            if(self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
             if frame.button("settings").clicked(){
-                self.app_settings.open = true;
+                self.app_state.settings_open = true;
             }
         });
         /////////////////////////Explorer///////////////////////////////////
@@ -161,7 +187,7 @@ impl eframe::App for SphinxApp {
             .exact_width(ctx.screen_rect().width()*0.6)
             .show(ctx, |frame| {
                 #[allow(unused_parens)]
-                if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
+                if(self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
                 frame.horizontal(|ui|{
                     if ui.button("⟲").clicked() { 
                        refresh_explorer(&self.app_settings.root_dir, self.tx.clone());
@@ -175,7 +201,7 @@ impl eframe::App for SphinxApp {
                         [ui.available_width(),ui.available_height()*0.1],
                         egui::Button::new("Add new project")
                     ).clicked() {
-                        self.add_dialog.open = true;
+                        self.app_state.project_open = true;
                     };
                     ui.separator();//-------------
                     egui::ScrollArea::vertical().max_height(f32::INFINITY).show(ui, |ui|{
@@ -184,7 +210,7 @@ impl eframe::App for SphinxApp {
                             self.app_state.explorer_dirs = dir;
                         }
                         let mut add_dialog = &mut self.add_dialog;
-                        explorer_tree(&self.app_state.explorer_dirs, ui, &mut add_dialog, &mut self.app_settings.selected_project_path);
+                        explorer_tree(&self.app_state.explorer_dirs, ui, &mut add_dialog, &mut self.app_state.project_open ,&mut self.app_settings.selected_project_path);
                         self.add_dialog = add_dialog.clone();
                     });
                 })
@@ -197,12 +223,12 @@ impl eframe::App for SphinxApp {
             .exact_height(ctx.available_rect().height()*0.5)
             .show(ctx, |frame| {
                 #[allow(unused_parens)]
-                if(self.add_dialog.open  || self.app_settings.open){frame.disable()}
+                if(self.app_state.project_open  || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
                 frame.vertical_centered(|ui| {ui.heading("Git history:");});
                 frame.separator();
                 #[allow(unused_parens)]
                 if(self.app_settings.selected_project_path != String::default()){
-                    let git_history = GitWidget::new(&PathBuf::from(&self.app_settings.selected_project_path), &self.commit_settings, self.app_state.git_history.clone()).unwrap();
+                    let git_history = GitWidget::new(&PathBuf::from(&self.app_settings.selected_project_path), &self.app_settings.commit_settings, self.app_state.git_history.clone()).unwrap();
                     self.app_state.git_history = git_history.clone();
                     frame.add(git_history);
                 }else {
@@ -216,14 +242,26 @@ impl eframe::App for SphinxApp {
             .exact_height(ctx.available_rect().height())
             .show(ctx, |frame| {
                 #[allow(unused_parens)]
-                if(self.add_dialog.open || self.app_settings.open){frame.disable()}
-                
+                if(self.app_state.project_open || self.app_state.settings_open || self.app_state.idea_open){frame.disable()}
+                if(self.app_settings.db_settings.db_url != String::default()){
+                    if(self.app_settings.db_settings.db_pool.is_some()){
+                        let ideas_board = IdeasBoard::new(&self.app_settings.db_settings, self.app_state.idea_board.clone());
+                        self.app_state.idea_board = ideas_board.clone();
+                        frame.add(ideas_board);
+                    }else{
+                        self.app_settings.db_settings.db_pool = Some(create_db_pool(&self.app_settings.db_settings));
+                        frame.label("Please setup the Database");
+                    }
+                }
+                else{
+                    frame.label("Please setup the Database");
+                }
             }
         );
         ////////////////////////Dialogs//////////////////////////////////
         //////////////////////////Add////////////////////////////////////
-        if self.add_dialog.open {
-            let mut open = self.add_dialog.open;
+        if self.app_state.project_open {
+            let mut open = self.app_state.project_open;
             egui::Window::new("Add Project..")
                 .fixed_size(egui::vec2(220f32, 100f32))
                 .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
@@ -259,13 +297,13 @@ impl eframe::App for SphinxApp {
                 });
             #[allow(unused_parens)]
             if(open==false){
-                self.add_dialog.open = open;
+                self.app_state.project_open = open;
                 self.add_dialog.reset();
             }
         }
         ////////////////////////Settings/////////////////////////////////
-        else if self.app_settings.open {
-            let mut open = self.app_settings.open;
+        else if self.app_state.settings_open {
+            let mut open = self.app_state.settings_open;
             egui::Window::new("Sphinx Settings")
                 .fixed_size(egui::vec2(220f32, 100f32))
                 .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
@@ -274,27 +312,38 @@ impl eframe::App for SphinxApp {
                 .show(ctx, |ui| {
                     ui.heading("Commit settings:");
                     ui.label("Git User:");
-                    ui.text_edit_singleline(&mut self.commit_settings.git_user);
+                    ui.text_edit_singleline(&mut self.app_settings.commit_settings.git_user);
                     ui.label("Git mail:");
-                    ui.text_edit_singleline(&mut self.commit_settings.git_mail);
-
+                    ui.text_edit_singleline(&mut self.app_settings.commit_settings.git_mail);
+                    ui.separator();
+                    ui.heading("Database settings:");
+                    ui.label("DB-Url:");
+                    ui.text_edit_singleline(&mut self.app_settings.db_settings.db_url);
                 });
             #[allow(unused_parens)]
             if(open==false){
-                self.app_settings.open = open;
+                self.app_state.settings_open = open;
+            }
+        }
+        /////////////////////////Ideas///////////////////////////////////
+        else if self.app_state.idea_open {
+            let mut open = self.app_state.idea_open;
+            egui::Window::new("Add Idea")
+                .fixed_size(egui::vec2(220f32, 100f32))
+                .anchor(egui::Align2::CENTER_CENTER, [0f32, 0f32])
+                .collapsible(false)
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    
+                });
+            #[allow(unused_parens)]
+            if(open==false){
+                self.app_state.idea_open = open;
             }
         }
     }
 }
 
 
-//UI events
-fn refresh_explorer(root: &str, tx: Sender<Directory>) {
-    let path = PathBuf::from(root);
-    tokio::spawn(async move {
-        let dir: Directory = dir_walk(0,&path, is_dir, sort_by_name).unwrap();
-        let _ = tx.send(dir);
-    });
-    //print_tree(&root, &dir);
-}
+
 

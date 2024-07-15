@@ -1,3 +1,5 @@
 /target
 /config
 start.bat
+.env
+.sqlx
