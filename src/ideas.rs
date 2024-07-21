@@ -1,6 +1,6 @@
 use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
 
-use egui::{accesskit::Vec2, Frame, Label, Memory, Widget};
+use egui::{Frame, Label, Layout, Widget};
 use sqlx::mysql::MySqlPool;
 
 use crate::{AddIdea, DbSettings};
@@ -15,7 +15,12 @@ pub async fn insert_idea(settings: DbSettings, idea: &AddIdea){
         .execute(&settings.db_pool.expect("Pool wasnt initialized properly")).await;
 }
 
-#[derive(Clone)]
+pub async fn update_idea(settings: DbSettings, idea: &AddIdea){
+    let _= sqlx::query!(r#"UPDATE `ideas` SET `title` = ?, `description` = ?, `lang` = ? WHERE `ideas`.`id` = ? "#,idea.title.clone(),idea.description.clone(),idea.lang.clone(),idea.id.clone())
+        .execute(&settings.db_pool.expect("Pool wasnt initialized properly")).await;
+}
+
+
 struct Idea{
     id: i32,
     title: String,
@@ -53,10 +58,10 @@ impl IdeasBoard {
         board
     }
 
-    pub fn new_board(settings: &DbSettings, ideas: &mut IdeasBoard, ui: &mut egui::Ui) -> egui::Response {
+    pub fn new_board(settings: &DbSettings, ideas: &mut IdeasBoard, ui: &mut egui::Ui, open_bool: &mut bool, open_dial: &mut AddIdea) -> egui::Response {
         if Instant::now().duration_since(ideas.last_update) < Duration::from_secs(20) {
             let i = ideas.clone();
-            return i.ui(ui);
+            return i.render(ui, open_bool, open_dial);
         }
         else {
             let pool = settings.db_pool.clone();
@@ -67,7 +72,7 @@ impl IdeasBoard {
             });
             ideas.last_update = Instant::now();
             let i = ideas.clone();
-            return i.ui(ui);
+            return i.render(ui, open_bool, open_dial);
         }
     }
 
@@ -85,12 +90,9 @@ impl IdeasBoard {
         return recs;
     }
 
-}
-
-impl Widget for IdeasBoard{
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+    fn render(self, ui: &mut egui::Ui, open_bool: &mut bool, open_dial: &mut AddIdea) -> egui::Response {
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui|{
-            let scroll = egui::ScrollArea::vertical()
+            egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .max_height(ui.available_height() - 15.0)
                 .show(ui, |ui| {
@@ -104,13 +106,54 @@ impl Widget for IdeasBoard{
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
                                     ui.horizontal(|ui| {
-                                        ui.add(Label::new(egui::RichText::new(&idea.title).heading()).truncate())
+                                        ui.add(Label::new(egui::RichText::new(&idea.title).heading()).truncate());
+                                        ui.with_layout(Layout::right_to_left(egui::Align::TOP), |ui|{
+                                            if ui.button("edit").clicked(){
+                                                *open_bool = true;
+                                                open_dial.id = idea.id.clone();
+                                                open_dial.title = idea.title.clone();
+                                                open_dial.description = idea.description.clone();
+                                                open_dial.lang = idea.lang.clone();
+                                                open_dial.mode = true;
+                                            }
+                                        });
                                     });
-                                    ui.add(Label::new(&idea.description).truncate())
+                                    ui.add(Label::new(&idea.description).truncate());
                                 });
                         }
                     }
                 });
         }).response
     }
+
+}
+
+impl Widget for IdeasBoard{
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui|{
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .max_height(ui.available_height() - 15.0)
+                .show(ui, |ui| {
+                    if let Ok(locked_ideas) = self.idea_list.lock() {
+                        for idea in locked_ideas.iter() {
+                            Frame::none()
+                                .fill(ui.visuals().faint_bg_color)
+                                .inner_margin(8.0)
+                                .outer_margin(2.0)
+                                .rounding(4.0)
+                                .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    ui.horizontal(|ui| {
+                                        ui.add(Label::new(egui::RichText::new(&idea.title).heading()).truncate());
+                                        
+                                    });
+                                    ui.add(Label::new(&idea.description).truncate());
+                                });
+                        }
+                    }
+                });
+        }).response
+    }
+    
 }

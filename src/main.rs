@@ -67,11 +67,22 @@ impl AddDialog {
 
 #[derive(Default,Clone)]
 struct AddIdea {
+    id: i32,
     lang: String,
     description: String,
     title: String,
+    mode: bool, // false = insert , true = update
 }
 
+impl AddIdea {
+    fn reset(&mut self){
+            self.id = Default::default();
+            self.lang = Default::default();
+            self.description = Default::default();
+            self.title = Default::default();
+            self.mode = false;
+    }
+}
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 #[derive(Default,Clone)]
@@ -112,6 +123,7 @@ struct AppState{
     settings_open: bool,
     project_open: bool,
     idea_open: bool,
+
     git_history: GitWidget,
     explorer_dirs: Directory,
     idea_board: IdeasBoard,
@@ -257,7 +269,12 @@ impl eframe::App for SphinxApp {
                 });
                 if self.app_settings.db_settings.db_url != String::default() {
                     if self.app_settings.db_settings.db_pool.is_some() {
-                        IdeasBoard::new_board(&self.app_settings.db_settings, &mut self.app_state.idea_board, frame);
+                        IdeasBoard::new_board(
+                            &self.app_settings.db_settings, 
+                            &mut self.app_state.idea_board, 
+                            frame, 
+                            &mut self.app_state.idea_open, 
+                            &mut self.add_idea);
                     }else{
                         self.app_settings.db_settings.db_pool = Some(create_db_pool(&self.app_settings.db_settings));
                         frame.label("Please setup the Database");
@@ -353,23 +370,49 @@ impl eframe::App for SphinxApp {
                          "lang_dropbox",
                          &mut self.add_idea.lang, 
                          |ui, text| ui.selectable_label(false, text)));
-                    if ui.button("submit").clicked(){
-                        if self.app_settings.db_settings.db_url != String::default() {
-                            if self.app_settings.db_settings.db_pool.is_some() {
-                                let settings = self.app_settings.clone();
-                                let idea = self.add_idea.clone();
-                                tokio::spawn(async move {
-                                    insert_idea(settings.db_settings, &idea).await;
-                                });
-                                IdeasBoard::mark_update_ideas(&mut self.app_state.idea_board);
-                                self.app_state.idea_open = false;
+                    ui.horizontal(|ui|{
+                        let save_idea_button_resp = ui.add_sized(egui::Vec2::new(ui.available_width()/2.0, 20.0), egui::Button::new("add idea"));
+
+                        if save_idea_button_resp.clicked(){
+                            if self.app_settings.db_settings.db_url != String::default() {
+                                if self.app_settings.db_settings.db_pool.is_some() {
+                                    let settings = self.app_settings.clone();
+                                    let idea = self.add_idea.clone();
+                                    tokio::spawn(async move {
+                                        insert_idea(settings.db_settings, &idea).await;
+                                    });
+                                    IdeasBoard::mark_update_ideas(&mut self.app_state.idea_board);
+                                    self.app_state.idea_open = false;
+                                }
                             }
+                            self.add_idea.reset();
                         }
-                    }
+                        
+                        ui.add_enabled_ui(self.add_idea.mode, |ui|{
+                            let update_idea_button_resp = ui.add_sized(egui::Vec2::new(ui.available_width(), 20.0), egui::Button::new("update idea"));
+
+                            if update_idea_button_resp.clicked(){
+                                if self.app_settings.db_settings.db_url != String::default() {
+                                    if self.app_settings.db_settings.db_pool.is_some() {
+                                        let settings = self.app_settings.clone();
+                                        let idea = self.add_idea.clone();
+                                        tokio::spawn(async move {
+                                            update_idea(settings.db_settings, &idea).await;
+                                        });
+                                        IdeasBoard::mark_update_ideas(&mut self.app_state.idea_board);
+                                        self.app_state.idea_open = false;
+                                    }
+                                }
+                                self.add_idea.reset();
+                            }
+                        });
+                    });
+                    
                 });
             
             if open==false {
                 self.app_state.idea_open = open;
+                self.add_idea.reset();
             }
         }
     }
