@@ -1,6 +1,6 @@
 use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
 
-use egui::{Frame, Label, Widget};
+use egui::{accesskit::Vec2, Frame, Label, Memory, Widget};
 use sqlx::mysql::MySqlPool;
 
 use crate::{AddIdea, DbSettings};
@@ -11,7 +11,7 @@ pub fn create_db_pool(settings: &DbSettings) -> sqlx::Pool<sqlx::MySql>{
 }
 
 pub async fn insert_idea(settings: DbSettings, idea: &AddIdea){
-    sqlx::query!(r#"INSERT INTO `ideas` (`title`, `description`, `lang`) VALUES (?, ?, ?)"#,idea.title.clone(),idea.description.clone(),idea.lang.clone())
+    let _= sqlx::query!(r#"INSERT INTO `ideas` (`title`, `description`, `lang`) VALUES (?, ?, ?)"#,idea.title.clone(),idea.description.clone(),idea.lang.clone())
         .execute(&settings.db_pool.expect("Pool wasnt initialized properly")).await;
 }
 
@@ -39,23 +39,40 @@ impl Default for IdeasBoard {
 }
 
 impl IdeasBoard {
-    pub fn new(settings: &DbSettings, ideas: IdeasBoard) -> Self {
+    pub fn new(settings: &DbSettings) -> Self {
+        let board: IdeasBoard = IdeasBoard { 
+            idea_list: Arc::new(Mutex::new(Vec::new())), 
+            last_update: Instant::now(),
+        };
+        let pool = settings.db_pool.clone();
+        let idea_list = board.idea_list.clone();
+        tokio::spawn(async move {
+            let updated_ideas = Self::update_ideas(pool.expect("DB-pool not initialised")).await;
+            *idea_list.lock().unwrap() = updated_ideas;
+        });
+        board
+    }
+
+    pub fn new_board(settings: &DbSettings, ideas: &mut IdeasBoard, ui: &mut egui::Ui) -> egui::Response {
         if Instant::now().duration_since(ideas.last_update) < Duration::from_secs(20) {
-            return ideas;
+            let i = ideas.clone();
+            return i.ui(ui);
         }
         else {
-            let board: IdeasBoard = IdeasBoard { 
-                idea_list: Arc::new(Mutex::new(Vec::new())), 
-                last_update: Instant::now(),
-            };
             let pool = settings.db_pool.clone();
-            let idea_list = board.idea_list.clone();
+            let idea_list = ideas.idea_list.clone();
             tokio::spawn(async move {
                 let updated_ideas = Self::update_ideas(pool.expect("DB-pool not initialised")).await;
                 *idea_list.lock().unwrap() = updated_ideas;
             });
-            board
+            ideas.last_update = Instant::now();
+            let i = ideas.clone();
+            return i.ui(ui);
         }
+    }
+
+    pub fn mark_update_ideas(ideas: &mut IdeasBoard){
+        ideas.last_update = Instant::now() - Duration::from_secs(60);
     }
 
     async fn update_ideas(pool: MySqlPool)->Vec<Idea>{
@@ -73,7 +90,7 @@ impl IdeasBoard {
 impl Widget for IdeasBoard{
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui|{
-            egui::ScrollArea::vertical()
+            let scroll = egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .max_height(ui.available_height() - 15.0)
                 .show(ui, |ui| {
@@ -93,7 +110,7 @@ impl Widget for IdeasBoard{
                                 });
                         }
                     }
-                })
+                });
         }).response
     }
 }

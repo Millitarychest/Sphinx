@@ -1,12 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-
 mod dir_tree;
-
 mod project;
-
 mod sphinx_git;
-
 mod ideas;
 
 use std::path::PathBuf;
@@ -38,6 +34,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0,500.0]),
+        vsync: true,
         ..Default::default()
     };
     eframe::run_native(
@@ -148,6 +145,7 @@ impl SphinxApp {
             }
             app.app_state.explorer_dirs = dir_walk(0, &PathBuf::from(app.app_settings.root_dir.clone()), is_dir, sort_by_name).unwrap();
             app.add_dialog.reset();
+            app.app_state.idea_board = IdeasBoard::new(&app.app_settings.db_settings);
             return app;
         }
         let mut app: SphinxApp = Default::default();
@@ -259,9 +257,7 @@ impl eframe::App for SphinxApp {
                 });
                 if self.app_settings.db_settings.db_url != String::default() {
                     if self.app_settings.db_settings.db_pool.is_some() {
-                        let ideas_board = IdeasBoard::new(&self.app_settings.db_settings, self.app_state.idea_board.clone());
-                        self.app_state.idea_board = ideas_board.clone();
-                        frame.add(ideas_board);
+                        IdeasBoard::new_board(&self.app_settings.db_settings, &mut self.app_state.idea_board, frame);
                     }else{
                         self.app_settings.db_settings.db_pool = Some(create_db_pool(&self.app_settings.db_settings));
                         frame.label("Please setup the Database");
@@ -365,6 +361,7 @@ impl eframe::App for SphinxApp {
                                 tokio::spawn(async move {
                                     insert_idea(settings.db_settings, &idea).await;
                                 });
+                                IdeasBoard::mark_update_ideas(&mut self.app_state.idea_board);
                                 self.app_state.idea_open = false;
                             }
                         }

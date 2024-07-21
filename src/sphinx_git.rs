@@ -174,7 +174,7 @@ impl Widget for GitWidget {
                     let button_width = ui.available_width() - button_padding; 
                     if ui.add_sized([button_width, button_height], egui::Button::new("Commit")).clicked() {
                         commit(Repository::open(&self.repo).unwrap_or(git_init(self.repo.clone())), self.settings);
-                        println!("Push clicked");
+                        
                     }
                 });
             });
